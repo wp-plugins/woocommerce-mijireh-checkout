@@ -21,13 +21,10 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 	 *
 	 * @var string
 	 */
-	var $access_key;
+	public $access_key;
 
 	/**
 	 * Constructor for the gateway.
-	 *
-	 * @access public
-	 * @return void
 	 */
 	public function __construct() {
 		$this->id           = 'mijireh_checkout';
@@ -57,8 +54,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Install slurp page.
-	 *
-	 * @return void
 	 */
 	public function install_slurp_page() {
 		$slurp_page_installed = get_option( 'slurp_page_installed', false );
@@ -85,8 +80,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Notification.
-	 *
-	 * @return void
 	 */
 	public function mijireh_notification() {
 		if ( isset( $_GET['order_number'] ) ) {
@@ -118,8 +111,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Initialise Gateway Settings Form Fields
-	 *
-	 * @return void
 	 */
 	public function init_form_fields() {
 		$this->form_fields = array(
@@ -190,12 +181,20 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 				}
 			}
 
-			$mj_order->add_item( sprintf( __( 'Order %s' , 'woocommerce-gateway-mijireh-checkout' ), $wc_order->get_order_number() ) . ' - ' . implode( ', ', $item_names ), number_format( $wc_order->get_total() - round( $wc_order->get_total_shipping() + $wc_order->get_shipping_tax(), 2 ) + $wc_order->get_order_discount(), 2, '.', '' ), 1 );
+			if ( version_compare( WC_VERSION, '2.3', '>=' ) ) {
+				$discount = $wc_order->get_total_discount();
+			} else {
+				$discount = $wc_order->get_order_discount();
+			}
+
+			$mj_order->add_item( sprintf( __( 'Order %s' , 'woocommerce-gateway-mijireh-checkout' ), $wc_order->get_order_number() ) . ' - ' . implode( ', ', $item_names ), number_format( $wc_order->get_total() - round( $wc_order->get_total_shipping() + $wc_order->get_shipping_tax(), 2 ) + $discount, 2, '.', '' ), 1 );
 
 			if ( ( $wc_order->get_total_shipping() + $wc_order->get_shipping_tax() ) > 0 ) {
 				$mj_order->shipping = number_format( $wc_order->get_total_shipping() + $wc_order->get_shipping_tax(), 2, '.', '' );
 			}
+
 			$mj_order->show_tax = false;
+			$mj_order->discount = number_format( $wc_order->get_total_discount(), 2, '.', '' );
 
 		// No issues when prices exclude tax.
 		} else {
@@ -216,11 +215,11 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 			$mj_order->shipping = round( $wc_order->get_total_shipping(), 2 );
 			$mj_order->tax      = $wc_order->get_total_tax();
+			$mj_order->discount = $wc_order->get_total_discount();
 		}
 
 		// set order totals
-		$mj_order->total          = $wc_order->get_total();
-		$mj_order->discount       = $wc_order->get_total_discount();
+		$mj_order->total = $wc_order->get_total();
 
 		// add billing address to order
 		$billing                  = new Mijireh_Address();
@@ -284,8 +283,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Init Mijireh.
-	 *
-	 * @return void
 	 */
 	public static function init_mijireh() {
 		if ( ! class_exists( 'Mijireh' ) ) {
@@ -324,8 +321,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Add page slurp meta.
-	 *
-	 * @return void
 	 */
 	public static function add_page_slurp_meta() {
 		if ( self::is_slurp_page() ) {
