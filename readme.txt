@@ -2,8 +2,8 @@
 Contributors: woothemes, mikejolley, claudiosanches
 Tags: woocommerce, shortcodes
 Requires at least: 3.9
-Tested up to: 4.1
-Stable tag: 1.0.2
+Tested up to: 4.1.1
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -55,6 +55,10 @@ You can contribute to the source code in our [GitHub](https://github.com/woothem
 
 == Changelog ==
 
+= 1.0.3 - 2015/03/13 =
+
+* Fixed slurp page ajax request.
+
 = 1.0.2 - 2015/02/13 =
 
 * Fixed an error when use coupons and the "Prices Entered With Tax" option as "Yes, I will enter prices inclusive of tax".
@@ -70,8 +74,6 @@ You can contribute to the source code in our [GitHub](https://github.com/woothem
 
 == Upgrade Notice ==
 
-= 1.0.2 =
+= 1.0.3 =
 
-* Fixed the "Slurp your custom checkout page" meta box in WooCommerce 2.3.
-* Added support for WooCommerce 2.3.
-* Fixed an error when use coupons and the "Prices Entered With Tax" option as "Yes, I will enter prices inclusive of tax".
+* Fixed slurp page ajax request.
