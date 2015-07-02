@@ -21,13 +21,10 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 	 *
 	 * @var string
 	 */
-	var $access_key;
+	public $access_key;
 
 	/**
 	 * Constructor for the gateway.
-	 *
-	 * @access public
-	 * @return void
 	 */
 	public function __construct() {
 		$this->id           = 'mijireh_checkout';
@@ -57,8 +54,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Install slurp page.
-	 *
-	 * @return void
 	 */
 	public function install_slurp_page() {
 		$slurp_page_installed = get_option( 'slurp_page_installed', false );
@@ -85,8 +80,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Notification.
-	 *
-	 * @return void
 	 */
 	public function mijireh_notification() {
 		if ( isset( $_GET['order_number'] ) ) {
@@ -118,8 +111,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Initialise Gateway Settings Form Fields
-	 *
-	 * @return void
 	 */
 	public function init_form_fields() {
 		$this->form_fields = array(
@@ -171,13 +162,48 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 	 */
 	public function process_payment( $order_id ) {
 
-		$this->init_mijireh();
+		self::init_mijireh();
 
 		$mj_order = new Mijireh_Order();
 		$wc_order = wc_get_order( $order_id );
+		$send_as_lump = false;
 
 		// Avoid rounding issues altogether by sending the order as one lump.
-		if ( 'yes' == get_option( 'woocommerce_prices_include_tax' ) ) {
+		if ( 'yes' !== get_option( 'woocommerce_prices_include_tax' ) ) {
+			$calculated_total = 0;
+			$items = $wc_order->get_items();
+
+			foreach ( $items as $item ) {
+				$product = $wc_order->get_product_from_item( $item );
+				$mj_order->add_item( $item['name'], $wc_order->get_item_subtotal( $item, false, true ), $item['qty'], $product->get_sku() );
+				$calculated_total += $wc_order->get_item_subtotal( $item, false ) * $item['qty'];
+			}
+
+			// Handle fees
+			$items = $wc_order->get_fees();
+
+			foreach ( $items as $item ) {
+				$mj_order->add_item( $item['name'], number_format( $item['line_total'], 2, '.', ',' ), 1, '' );
+				$calculated_total += $item['line_total'];
+			}
+
+			// Check for mismatched totals
+			if ( wc_format_decimal( $calculated_total + $wc_order->get_total_tax() + round( $wc_order->get_total_shipping(), 2 ) - round( $wc_order->get_total_discount(), 2 ), 2 ) != wc_format_decimal( $wc_order->get_total(), 2 ) ) {
+				$send_as_lump = true;
+			} else {
+				$mj_order->shipping = number_format( $wc_order->get_total_shipping(), 2, '.', '' );
+				$mj_order->tax      = number_format( $wc_order->get_total_tax(), 2, '.', '' );
+				$mj_order->discount = number_format( $wc_order->get_total_discount(), 2, '.', '' );
+				$mj_order->total    = number_format( $wc_order->get_total(), 2, '.', '' );
+			}
+		} else {
+			$send_as_lump = true;
+		}
+
+		if ( true === $send_as_lump ) {
+			// Reset order items and tax  in case we went through the block above
+			$mj_order->clear_items();
+			$mj_order->tax = 0;
 
 			// Don't pass items - Pass 1 item for the order items overall.
 			$item_names = array();
@@ -190,37 +216,24 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 				}
 			}
 
-			$mj_order->add_item( sprintf( __( 'Order %s' , 'woocommerce-gateway-mijireh-checkout' ), $wc_order->get_order_number() ) . ' - ' . implode( ', ', $item_names ), number_format( $wc_order->get_total() - round( $wc_order->get_total_shipping() + $wc_order->get_shipping_tax(), 2 ) + $wc_order->get_order_discount(), 2, '.', '' ), 1 );
+			if ( version_compare( WC_VERSION, '2.3', '>=' ) ) {
+				$mj_order->discount = $discount = number_format( $wc_order->get_total_discount(), 2, '.', '' );
+			} else {
+				$mj_order->discount = $discount = number_format( $wc_order->get_order_discount(), 2, '.', '' );
+			}
+
+			// this filter is added to circumvent character limit issues with certain gateways causing payment failure
+			$item_desc = apply_filters( 'woocommerce_mijireh_checkout_consolidated_char_limit', sprintf( __( 'Order %s' , 'woocommerce-gateway-mijireh-checkout' ), $wc_order->get_order_number() ) . ' - ' . implode( ', ', $item_names ) );
+
+			$mj_order->add_item( $item_desc, number_format( $wc_order->get_total() - round( $wc_order->get_total_shipping() + $wc_order->get_shipping_tax(), 2 ) + $discount, 2, '.', '' ), 1 );
 
 			if ( ( $wc_order->get_total_shipping() + $wc_order->get_shipping_tax() ) > 0 ) {
 				$mj_order->shipping = number_format( $wc_order->get_total_shipping() + $wc_order->get_shipping_tax(), 2, '.', '' );
 			}
+
 			$mj_order->show_tax = false;
-
-		// No issues when prices exclude tax.
-		} else {
-			// add items to order.
-			$items = $wc_order->get_items();
-
-			foreach ( $items as $item ) {
-				$product = $wc_order->get_product_from_item( $item );
-				$mj_order->add_item( $item['name'], $wc_order->get_item_subtotal( $item, false, true ), $item['qty'], $product->get_sku() );
-			}
-
-			// Handle fees
-			$items = $wc_order->get_fees();
-
-			foreach ( $items as $item ) {
-				$mj_order->add_item( $item['name'], number_format( $item['line_total'], 2, '.', ',' ), 1, '' );
-			}
-
-			$mj_order->shipping = round( $wc_order->get_total_shipping(), 2 );
-			$mj_order->tax      = $wc_order->get_total_tax();
+			$mj_order->total = number_format( $wc_order->get_total(), 2, '.', '' );
 		}
-
-		// set order totals
-		$mj_order->total          = $wc_order->get_total();
-		$mj_order->discount       = $wc_order->get_total_discount();
 
 		// add billing address to order
 		$billing                  = new Mijireh_Address();
@@ -269,6 +282,8 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 		// Identify woocommerce
 		$mj_order->partner_id     = 'woo';
 
+		$mj_order = apply_filters( 'woocommerce_mijireh_checkout_mj_order', $mj_order );
+
 		try {
 			$mj_order->create();
 			$result = array(
@@ -284,8 +299,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Init Mijireh.
-	 *
-	 * @return void
 	 */
 	public static function init_mijireh() {
 		if ( ! class_exists( 'Mijireh' ) ) {
@@ -324,8 +337,6 @@ class WC_Gateway_Mijireh extends WC_Payment_Gateway {
 
 	/**
 	 * Add page slurp meta.
-	 *
-	 * @return void
 	 */
 	public static function add_page_slurp_meta() {
 		if ( self::is_slurp_page() ) {
